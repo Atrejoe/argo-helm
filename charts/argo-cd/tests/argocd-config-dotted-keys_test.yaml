@@ -1,0 +1,44 @@
+suite: argo config maps render flat dotted keys
+templates:
+  - templates/argocd-configs/argocd-cm.yaml
+  - templates/argocd-configs/argocd-cmd-params-cm.yaml
+tests:
+  - it: argocd-cm renders dotted config keys flat by default
+    template: templates/argocd-configs/argocd-cm.yaml
+    asserts:
+      - equal:
+          path: data["exec.enabled"]
+          value: "false"
+      # No bare "exec" key: the value must be the flat "exec.enabled" key.
+      - notExists:
+          path: data.exec
+
+  - it: argocd-cm flattens nested configs.cm values (as produced by --set) into dotted keys
+    template: templates/argocd-configs/argocd-cm.yaml
+    values:
+      - values/nested-config.yaml
+    asserts:
+      # The nested override wins over the chart default and lands on the dotted key,
+      # including keys nested several levels deep.
+      - equal:
+          path: data["exec.enabled"]
+          value: "true"
+      - equal:
+          path: data["resource.compareoptions.ignoreAggregatedRoles"]
+          value: "true"
+      # The nested maps must not leak through as `exec: map[enabled:true]`.
+      - notExists:
+          path: data.exec
+      - notExists:
+          path: data.resource
+
+  - it: argocd-cmd-params-cm flattens nested configs.params values into dotted keys
+    template: templates/argocd-configs/argocd-cmd-params-cm.yaml
+    values:
+      - values/nested-config.yaml
+    asserts:
+      - equal:
+          path: data["server.insecure"]
+          value: "true"
+      - notExists:
+          path: data.server

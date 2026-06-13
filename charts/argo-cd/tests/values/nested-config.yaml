@@ -1,0 +1,19 @@
+# Fixture for argocd-config-dotted-keys_test.yaml.
+#
+# Argo CD ConfigMaps (argocd-cm, argocd-cmd-params-cm) expect flat, dot-separated
+# keys such as `exec.enabled` or `server.insecure`. When such a key is supplied on
+# the command line, Helm expands the dots into a nested map, e.g.
+#   --set configs.cm.exec.enabled=true
+# becomes `configs: {cm: {exec: {enabled: true}}}`. This file reproduces exactly
+# that nested shape so the tests can assert the chart flattens it back into the
+# dotted keys Argo CD understands (see "argo-cd.config.flatten" in _helpers.tpl).
+configs:
+  cm:
+    exec:
+      enabled: true
+    resource:
+      compareoptions:
+        ignoreAggregatedRoles: true
+  params:
+    server:
+      insecure: true
