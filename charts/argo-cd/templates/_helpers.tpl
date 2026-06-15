@@ -211,12 +211,43 @@ Argo Configuration Preset Values (Influenced by Values configuration)
 {{- end -}}
 
 {{/*
+Flatten a (possibly nested) dictionary into a single-level dictionary whose keys
+use dot notation, as expected by the Argo CD ConfigMaps (e.g. `exec.enabled`).
+Values supplied on the command line such as `--set configs.cm.exec.enabled=true`
+are expanded by Helm into a nested map (`exec: {enabled: true}`), which would
+otherwise render as the invalid `exec: map[enabled:true]`. Flattening turns that
+back into the expected `exec.enabled: true` key.
+Scalar values are written before nested maps are walked, so a value coming from a
+nested map (a user override) takes precedence over a literal dotted key of the
+same name (a chart default).
+Usage:
+  {{ $flat := dict }}
+  {{ include "argo-cd.config.flatten" (dict "data" $someDict "result" $flat "prefix" "") }}
+*/}}
+{{- define "argo-cd.config.flatten" -}}
+{{- $result := .result -}}
+{{- $prefix := .prefix -}}
+{{- range $key, $value := .data -}}
+{{- if not (kindIs "map" $value) -}}
+{{- $_ := set $result (ternary $key (printf "%s.%s" $prefix $key) (eq $prefix "")) $value -}}
+{{- end -}}
+{{- end -}}
+{{- range $key, $value := .data -}}
+{{- if kindIs "map" $value -}}
+{{- include "argo-cd.config.flatten" (dict "data" $value "result" $result "prefix" (ternary $key (printf "%s.%s" $prefix $key) (eq $prefix ""))) -}}
+{{- end -}}
+{{- end -}}
+{{- end -}}
+
+{{/*
 Merge Argo Configuration with Preset Configuration
 */}}
 {{- define "argo-cd.config.cm" -}}
 {{- $config := omit .Values.configs.cm "create" "annotations" -}}
 {{- $preset := include "argo-cd.config.cm.presets" . | fromYaml | default dict -}}
-{{- range $key, $value := mergeOverwrite $preset $config }}
+{{- $flat := dict -}}
+{{- include "argo-cd.config.flatten" (dict "data" (mergeOverwrite $preset $config) "result" $flat "prefix" "") -}}
+{{- range $key, $value := $flat }}
 {{- $fmted := $value | toString }}
 {{- if not (eq $fmted "") }}
 {{ $key }}: {{ $fmted | toYaml }}
@@ -254,7 +285,9 @@ Merge Argo Params Configuration with Preset Configuration
 {{- define "argo-cd.config.params" -}}
 {{- $config := omit .Values.configs.params "create" "annotations" }}
 {{- $preset := include "argo-cd.config.params.presets" . | fromYaml | default dict -}}
-{{- range $key, $value := mergeOverwrite $preset $config }}
+{{- $flat := dict -}}
+{{- include "argo-cd.config.flatten" (dict "data" (mergeOverwrite $preset $config) "result" $flat "prefix" "") -}}
+{{- range $key, $value := $flat }}
 {{ $key }}: {{ toString $value | toYaml }}
 {{- end }}
 {{- end -}}
